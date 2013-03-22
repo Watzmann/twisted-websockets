@@ -1,22 +1,30 @@
 import sys
+import os
 from twisted.python import log
 from twisted.internet import reactor
+from twisted.internet.protocol import Factory
 from twisted.web.static import File
-from twisted.web.websocket import WebSocketHandler, WebSocketSite
+from twisted.web.server import Site
+from twisted.web.resource import Resource
+from twisted.web.websockets import WebSocketsProtocol, WebSocketsResource
 
+class Echohandler(WebSocketsProtocol):
+    def frameReceived(self, opcode, frame, fin):
+        log.msg("Received frame '%s (%s|%s)'" % (frame, opcode, fin))
+        self.sendFrame(opcode, frame + "\n", True)
 
-class Echohandler(WebSocketHandler):
-    def frameReceived(self, frame):
-        log.msg("Received frame '%s'" % frame)
-        self.transport.write(frame + "\n")
-
+class EchoFactory(Factory):
+    protocol = Echohandler
 
 def main():
     log.startLogging(sys.stdout)
-    root = File(".")
-    site = WebSocketSite(root)
-    site.addHandler("/ws/echo", Echohandler)
-    reactor.listenTCP(8000, site)
+    resource = WebSocketsResource(EchoFactory())
+    root = Resource()
+    path = os.path.join(os.path.dirname(__file__), "index.html")
+    root.putChild("", File(path))
+    root.putChild("ws", resource)
+
+    reactor.listenTCP(8000, Site(root))
     reactor.run()
 
 
